@@ -22,7 +22,7 @@ from PIL import Image
 nest_asyncio.apply()
 
 # ページ設定
-st.set_page_config(page_title="Menu Player Generator", layout="wide")
+st.set_page_config(page_title="Menu Player Generator (Multi-Lang)", layout="wide")
 
 # CSSでボタンのスタイル調整（間隔確保）
 st.markdown("""
@@ -45,6 +45,50 @@ def load_dictionary():
 def save_dictionary(new_dict):
     with open(DICT_FILE, "w", encoding="utf-8") as f:
         json.dump(new_dict, f, ensure_ascii=False, indent=2)
+
+# --- 言語設定・定数 ---
+LANG_CONFIG = {
+    "日本語": {
+        "voice": "ja-JP-NanamiNeural",
+        "prompt_target": "日本語",
+        "currency": "円",
+        "intro_template": "こんにちは、{store}です。ただいまより{title}をご紹介します。",
+        "intro_index_msg": "このメニューは、全部で{count}つのカテゴリーに分かれています。まずは目次です。",
+        "intro_closing": "それではどうぞ。",
+        "intro_title": "はじめに・目次",
+        "ui": {"loading": "読み込み中...", "chapter": "チャプター一覧", "speed": "読み上げ速度", "map": "地図・アクセス", "play": "再生", "pause": "一時停止", "prev": "前へ", "next": "次へ", "slow": "ゆっくり", "normal": "標準", "fast": "速く"}
+    },
+    "English": {  # 表示はEnglish、中身はUK
+        "voice": "en-GB-SoniaNeural", 
+        "prompt_target": "English (UK Style)", # スペル等をUK仕様に
+        "currency": "yen",
+        "intro_template": "Hello, this is {store}. We would like to introduce our {title} menu.",
+        "intro_index_msg": "This menu is divided into {count} categories. First, here is the index.",
+        "intro_closing": "Please enjoy.",
+        "intro_title": "Introduction & Index",
+        "ui": {"loading": "Loading...", "chapter": "Chapters", "speed": "Speed", "map": "Map", "play": "Play", "pause": "Pause", "prev": "Prev", "next": "Next", "slow": "Slow", "normal": "Normal", "fast": "Fast"}
+    },
+    "中文 (简体)": {
+        "voice": "zh-CN-XiaoxiaoNeural",
+        "prompt_target": "中国語 (Simplified Chinese)",
+        "currency": "日元",
+        "intro_template": "你好，这里是{store}。现在为您介绍{title}。",
+        "intro_index_msg": "菜单共分为{count}个类别。首先是目录。",
+        "intro_closing": "请慢慢听。",
+        "intro_title": "简介与目录",
+        "ui": {"loading": "加载中...", "chapter": "章节列表", "speed": "语速", "map": "地图", "play": "播放", "pause": "暂停", "prev": "上一个", "next": "下一个", "slow": "慢速", "normal": "标准", "fast": "快速"}
+    },
+    "한국어": {
+        "voice": "ko-KR-SunHiNeural",
+        "prompt_target": "韓国語 (Korean)",
+        "currency": "엔",
+        "intro_template": "안녕하세요, {store}입니다. 지금부터 {title}를 소개해 드리겠습니다.",
+        "intro_index_msg": "메뉴는 총 {count}개의 카테고리로 나누어져 있습니다. 먼저 목차입니다.",
+        "intro_closing": "그럼 들어주세요.",
+        "intro_title": "소개 및 목차",
+        "ui": {"loading": "로딩 중...", "chapter": "챕터 목록", "speed": "재생 속도", "map": "지도", "play": "재생", "pause": "일시 정지", "prev": "이전", "next": "다음", "slow": "느리게", "normal": "보통", "fast": "빠르게"}
+    }
+}
 
 # --- 関数定義 ---
 def sanitize_filename(name):
@@ -71,9 +115,12 @@ async def generate_single_track_fast(text, filename, voice_code, rate_value):
                 return True
         except:
             await asyncio.sleep(1)
+    # gTTS fallback
     try:
+        lang_code = voice_code[:2].lower()
+        if "GB" in voice_code: lang_code = "en"
         def gtts_task():
-            tts = gTTS(text=text, lang='ja')
+            tts = gTTS(text=text, lang=lang_code)
             tts.save(filename)
         await asyncio.to_thread(gtts_task)
         return True
@@ -89,10 +136,9 @@ async def process_all_tracks_fast(menu_data, output_dir, voice_code, rate_value,
         save_path = os.path.join(output_dir, filename)
         speech_text = track['text']
         
-        # i=0 (はじめに) は番号なし
-        # i=1 (最初の料理) を「1番」とする
+        # 番号付けロジック: i=0(Intro)は番号なし, i=1以降は "1. " から開始
         if i > 0: 
-             speech_text = f"{i}、{track['title']}。\n{track['text']}"
+             speech_text = f"{i}. {track['title']}.\n{track['text']}"
              
         tasks.append(generate_single_track_fast(speech_text, save_path, voice_code, rate_value))
         track_info_list.append({"title": track['title'], "path": save_path})
@@ -105,8 +151,8 @@ async def process_all_tracks_fast(menu_data, output_dir, voice_code, rate_value,
         progress_bar.progress(completed / total)
     return track_info_list
 
-# HTMLプレイヤー生成
-def create_standalone_html_player(store_name, menu_data, map_url=""):
+# HTMLプレイヤー生成（多言語対応版）
+def create_standalone_html_player(store_name, menu_data, lang_settings, map_url=""):
     playlist_js = []
     for track in menu_data:
         file_path = track['path']
@@ -116,18 +162,21 @@ def create_standalone_html_player(store_name, menu_data, map_url=""):
                 playlist_js.append({"title": track['title'], "src": f"data:audio/mp3;base64,{b64_data}"})
     playlist_json_str = json.dumps(playlist_js, ensure_ascii=False)
     
+    ui = lang_settings["ui"]
+    
     map_button_html = ""
     if map_url:
         map_button_html = f"""
         <div style="text-align:center; margin-bottom: 15px;">
-            <a href="{map_url}" target="_blank" role="button" aria-label="地図・アクセス（Googleマップが別タブで開きます）" class="map-btn">
-                🗺️ 地図・アクセス (Google Map)
+            <a href="{map_url}" target="_blank" role="button" aria-label="{ui['map']}" class="map-btn">
+                🗺️ {ui['map']}
             </a>
         </div>
         """
 
+    # HTMLテンプレート（replace方式）
     html_template = """<!DOCTYPE html>
-<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>__STORE_NAME__ 音声メニュー</title>
+<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>__STORE_NAME__</title>
 <style>
 body{font-family:sans-serif;background:#f4f4f4;margin:0;padding:20px;line-height:1.6;}
 .c{max-width:600px;margin:0 auto;background:#fff;padding:20px;border-radius:15px;box-shadow:0 2px 10px rgba(0,0,0,0.1);}
@@ -137,17 +186,9 @@ h2{font-size:1.2em;color:#555;margin-top:20px;margin-bottom:10px;border-bottom:2
 .ti{font-size:1.3em;font-weight:bold;color:#b71c1c;}
 .ctrl{display:flex;gap:15px;margin:20px 0;justify-content:center;}
 button{
-    flex:1;
-    padding:15px 0;
-    font-size:1.8em; 
-    font-weight:bold;
-    color:#fff;
-    background:#ff4b4b; 
-    border:none;
-    border-radius:8px; 
-    cursor:pointer;
-    min-height:60px;
-    display:flex; justify-content:center; align-items:center;
+    flex:1; padding:15px 0; font-size:1.8em; font-weight:bold; color:#fff;
+    background:#ff4b4b; border:none; border-radius:8px; cursor:pointer;
+    min-height:60px; display:flex; justify-content:center; align-items:center;
     transition:background 0.2s;
 }
 button:hover{background:#e04141;}
@@ -162,26 +203,26 @@ button:focus, .map-btn:focus, select:focus, .itm:focus{outline:3px solid #333; o
 <main class="c" role="main">
     <h1>🎧 __STORE_NAME__</h1>
     __MAP_BUTTON__
-    <section aria-label="再生状況">
-        <div class="box"><div class="ti" id="ti" aria-live="polite">Loading...</div></div>
+    <section aria-label="Status">
+        <div class="box"><div class="ti" id="ti" aria-live="polite">__UI_LOADING__</div></div>
     </section>
-    <audio id="au" style="width:100%" aria-label="メニュー読み上げプレイヤー"></audio>
-    <section class="ctrl" aria-label="再生コントロール">
-        <button onclick="prev()" aria-label="前のチャプターへ">⏮</button>
-        <button onclick="toggle()" id="pb" aria-label="再生">▶</button>
-        <button onclick="next()" aria-label="次のチャプターへ">⏭</button>
+    <audio id="au" style="width:100%" aria-label="Audio Player"></audio>
+    <section class="ctrl" aria-label="Controls">
+        <button onclick="prev()" aria-label="__UI_PREV__">⏮</button>
+        <button onclick="toggle()" id="pb" aria-label="__UI_PLAY__">▶</button>
+        <button onclick="next()" aria-label="__UI_NEXT__">⏭</button>
     </section>
     <div style="text-align:center;margin-bottom:20px;">
-        <label for="sp" style="font-weight:bold; margin-right:5px;">読み上げ速度:</label>
+        <label for="sp" style="font-weight:bold; margin-right:5px;">__UI_SPEED__:</label>
         <select id="sp" onchange="csp()" style="font-size:1rem; padding:5px;">
-            <option value="0.8">0.8 (ゆっくり)</option>
-            <option value="1.0" selected>1.0 (標準)</option>
-            <option value="1.2">1.2 (やや速い)</option>
-            <option value="1.5">1.5 (速い)</option>
+            <option value="0.8">0.8 (__UI_SLOW__)</option>
+            <option value="1.0" selected>1.0 (__UI_NORMAL__)</option>
+            <option value="1.2">1.2 (__UI_FAST__)</option>
+            <option value="1.5">1.5</option>
         </select>
     </div>
-    <h2>📜 チャプター一覧</h2>
-    <div id="ls" class="lst" role="list" aria-label="メニューのチャプター一覧"></div>
+    <h2>📜 __UI_CHAPTER__</h2>
+    <div id="ls" class="lst" role="list"></div>
 </main>
 <script>
 const pl=__PLAYLIST_JSON__;let idx=0;
@@ -190,43 +231,22 @@ const ti=document.getElementById('ti');
 const pb=document.getElementById('pb');
 function init(){ren();ld(0);csp();}
 function ld(i){
-    idx=i;
-    au.src=pl[idx].src;
-    ti.innerText=pl[idx].title;
-    ren();
-    csp();
+    idx=i; au.src=pl[idx].src; ti.innerText=pl[idx].title; ren(); csp();
 }
 function toggle(){
-    if(au.paused){
-        au.play();
-        pb.innerText="⏸";
-        pb.setAttribute("aria-label", "一時停止");
-    }else{
-        au.pause();
-        pb.innerText="▶";
-        pb.setAttribute("aria-label", "再生");
-    }
+    if(au.paused){ au.play(); pb.innerText="⏸"; pb.setAttribute("aria-label", "__UI_PAUSE__"); }
+    else{ au.pause(); pb.innerText="▶"; pb.setAttribute("aria-label", "__UI_PLAY__"); }
 }
 function next(){
-    if(idx<pl.length-1){
-        ld(idx+1);
-        au.play();
-        pb.innerText="⏸";
-        pb.setAttribute("aria-label", "一時停止");
-    }
+    if(idx<pl.length-1){ ld(idx+1); au.play(); pb.innerText="⏸"; pb.setAttribute("aria-label", "__UI_PAUSE__"); }
 }
 function prev(){
-    if(idx>0){
-        ld(idx-1);
-        au.play();
-        pb.innerText="⏸";
-        pb.setAttribute("aria-label", "一時停止");
-    }
+    if(idx>0){ ld(idx-1); au.play(); pb.innerText="⏸"; pb.setAttribute("aria-label", "__UI_PAUSE__"); }
 }
 function csp(){au.playbackRate=parseFloat(document.getElementById('sp').value);}
 au.onended=function(){
     if(idx<pl.length-1){ next(); }
-    else { pb.innerText="▶"; pb.setAttribute("aria-label", "再生");}
+    else { pb.innerText="▶"; pb.setAttribute("aria-label", "__UI_PLAY__");}
 };
 function ren(){
     const d=document.getElementById('ls');
@@ -237,25 +257,40 @@ function ren(){
         m.setAttribute("role", "listitem");
         m.setAttribute("tabindex", "0");
         
+        // リスト番号付け: 0=Intro(なし), 1以降=1. 2.
         let label = t.title;
         if(i > 0){ label = i + ". " + t.title; }
         
         m.setAttribute("aria-label", label);
         m.innerText=label;
-        m.onclick=()=>{ld(i);au.play();pb.innerText="⏸";pb.setAttribute("aria-label","一時停止");};
+        m.onclick=()=>{ld(i);au.play();pb.innerText="⏸";pb.setAttribute("aria-label","__UI_PAUSE__");};
         m.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();d.click();}};
         d.appendChild(m);
     });
 }
 init();
 </script></body></html>"""
-    final_html = html_template.replace("__STORE_NAME__", store_name)
-    final_html = final_html.replace("__PLAYLIST_JSON__", playlist_json_str)
-    final_html = final_html.replace("__MAP_BUTTON__", map_button_html)
-    return final_html
+    
+    html = html_template.replace("__STORE_NAME__", store_name)
+    html = html.replace("__MAP_BUTTON__", map_button_html)
+    html = html.replace("__PLAYLIST_JSON__", playlist_json_str)
+    
+    # UI置換
+    html = html.replace("__UI_LOADING__", ui['loading'])
+    html = html.replace("__UI_PREV__", ui['prev'])
+    html = html.replace("__UI_PLAY__", ui['play'])
+    html = html.replace("__UI_PAUSE__", ui['pause'])
+    html = html.replace("__UI_NEXT__", ui['next'])
+    html = html.replace("__UI_SPEED__", ui['speed'])
+    html = html.replace("__UI_SLOW__", ui['slow'])
+    html = html.replace("__UI_NORMAL__", ui['normal'])
+    html = html.replace("__UI_FAST__", ui['fast'])
+    html = html.replace("__UI_CHAPTER__", ui['chapter'])
+    
+    return html
 
-# プレビュー用プレイヤー
-def render_preview_player(tracks):
+# プレビュー用プレイヤー（多言語対応版）
+def render_preview_player(tracks, lang_settings):
     playlist_data = []
     for track in tracks:
         if os.path.exists(track['path']):
@@ -263,6 +298,7 @@ def render_preview_player(tracks):
                 b64 = base64.b64encode(f.read()).decode()
                 playlist_data.append({"title": track['title'],"src": f"data:audio/mp3;base64,{b64}"})
     playlist_json = json.dumps(playlist_data)
+    ui = lang_settings["ui"]
     
     html_template = """<!DOCTYPE html><html><head><style>
     body{margin:0;padding:0;font-family:sans-serif;}
@@ -270,10 +306,9 @@ def render_preview_player(tracks):
     .t-ti{font-size:18px;font-weight:bold;color:#333;margin-bottom:10px;padding:10px;background:#fff;border-radius:8px;border-left:5px solid #ff4b4b;}
     .ctrls{display:flex; gap:10px; margin:15px 0;}
     button {
-        flex: 1;
-        background-color: #ff4b4b; color: white; border: none;
-        border-radius: 8px; font-size: 24px; padding: 10px 0;
-        cursor: pointer; line-height: 1; min-height: 50px;
+        flex: 1; background-color: #ff4b4b; color: white; border: none;
+        border-radius: 8px; font-size: 24px; padding: 10px 0; cursor: pointer;
+        line-height: 1; min-height: 50px;
     }
     button:hover { background-color: #e04141; }
     button:focus { outline: 3px solid #333; outline-offset: 2px; }
@@ -283,73 +318,63 @@ def render_preview_player(tracks):
     .it.active{color:#b71c1c;font-weight:bold;background:#ffecec;}
     </style></head><body><div class="p-box"><div id="ti" class="t-ti">...</div><audio id="au" controls style="width:100%;height:30px;"></audio>
     <div class="ctrls">
-        <button onclick="pv()" aria-label="前へ">⏮</button>
-        <button onclick="tg()" id="pb" aria-label="再生">▶</button>
-        <button onclick="nx()" aria-label="次へ">⏭</button>
+        <button onclick="pv()" aria-label="__UI_PREV__">⏮</button>
+        <button onclick="tg()" id="pb" aria-label="__UI_PLAY__">▶</button>
+        <button onclick="nx()" aria-label="__UI_NEXT__">⏭</button>
     </div>
     <div style="font-size:12px;color:#666; margin-top:5px;">
-        速度:<select id="sp" onchange="sp()"><option value="0.8">0.8</option><option value="1.0" selected>1.0</option><option value="1.2">1.2</option><option value="1.5">1.5</option></select>
+        __UI_SPEED__:<select id="sp" onchange="sp()"><option value="0.8">0.8</option><option value="1.0" selected>1.0</option><option value="1.2">1.2</option><option value="1.5">1.5</option></select>
     </div>
     <div id="ls" class="lst" role="list"></div></div>
     <script>
     const pl=__PLAYLIST__;let x=0;const au=document.getElementById('au');const ti=document.getElementById('ti');const pb=document.getElementById('pb');const ls=document.getElementById('ls');
     function init(){rn();ld(0);sp();}
     function ld(i){x=i;au.src=pl[x].src;ti.innerText=pl[x].title;rn();sp();}
-    function tg(){if(au.paused){au.play();pb.innerText="⏸";pb.setAttribute("aria-label","一時停止");}else{au.pause();pb.innerText="▶";pb.setAttribute("aria-label","再生");}}
-    function nx(){if(x<pl.length-1){ld(x+1);au.play();pb.innerText="⏸";pb.setAttribute("aria-label","一時停止");}}
-    function pv(){if(x>0){ld(x-1);au.play();pb.innerText="⏸";pb.setAttribute("aria-label","一時停止");}}
+    function tg(){if(au.paused){au.play();pb.innerText="⏸";pb.setAttribute("aria-label","__UI_PAUSE__");}else{au.pause();pb.innerText="▶";pb.setAttribute("aria-label","__UI_PLAY__");}}
+    function nx(){if(x<pl.length-1){ld(x+1);au.play();pb.innerText="⏸";pb.setAttribute("aria-label","__UI_PAUSE__");}}
+    function pv(){if(x>0){ld(x-1);au.play();pb.innerText="⏸";pb.setAttribute("aria-label","__UI_PAUSE__");}}
     function sp(){au.playbackRate=parseFloat(document.getElementById('sp').value);}
-    au.onended=function(){if(x<pl.length-1)nx();else{pb.innerText="▶";pb.setAttribute("aria-label","再生");}};
+    au.onended=function(){if(x<pl.length-1)nx();else{pb.innerText="▶";pb.setAttribute("aria-label","__UI_PLAY__");}};
     function rn(){ls.innerHTML="";pl.forEach((t,i)=>{
         const d=document.createElement('div');
         d.className="it "+(i===x?"active":"");
         let l=t.title; if(i>0){l=i+". "+t.title;}
         d.innerText=l;
-        d.setAttribute("role","listitem");d.setAttribute("tabindex","0");d.onclick=()=>{ld(i);au.play();pb.innerText="⏸";pb.setAttribute("aria-label","一時停止");};d.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();d.click();}};ls.appendChild(d);});}
+        d.setAttribute("role","listitem");d.setAttribute("tabindex","0");d.onclick=()=>{ld(i);au.play();pb.innerText="⏸";pb.setAttribute("aria-label","__UI_PAUSE__");};d.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();d.click();}};ls.appendChild(d);});}
     init();</script></body></html>"""
-    final_html = html_template.replace("__PLAYLIST__", playlist_json)
-    components.html(final_html, height=450)
+    
+    html = html_template.replace("__PLAYLIST__", playlist_json)
+    html = html.replace("__UI_PREV__", ui['prev'])
+    html = html.replace("__UI_PLAY__", ui['play'])
+    html = html.replace("__UI_PAUSE__", ui['pause'])
+    html = html.replace("__UI_NEXT__", ui['next'])
+    html = html.replace("__UI_SPEED__", ui['speed'])
+    components.html(html, height=450)
 
 # --- UI ---
 with st.sidebar:
-    st.header("🔧 設定")
+    st.header("🔧 設定 / Settings")
     if "GEMINI_API_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_API_KEY"]
-        st.success("🔑 APIキー認証済み")
+        st.success("🔑 API Key OK")
     else:
         api_key = st.text_input("Gemini APIキー", type="password")
     
-    valid_models = []
-    target_model_name = None
-    if api_key:
-        try:
-            genai.configure(api_key=api_key)
-            all_models = list(genai.list_models())
-            valid_models = [m.name for m in all_models if 'generateContent' in m.supported_generation_methods]
-            default_idx = next((i for i, n in enumerate(valid_models) if "flash" in n), 0)
-            target_model_name = st.selectbox("使用するAIモデル", valid_models, index=default_idx)
-        except: pass
-    
-    st.divider()
-    st.subheader("🗣️ 音声設定")
-    voice_options = {"女性（七海）": "ja-JP-NanamiNeural", "男性（慶太）": "ja-JP-KeitaNeural"}
-    selected_voice = st.selectbox("声の種類", list(voice_options.keys()))
-    voice_code = voice_options[selected_voice]
-    rate_value = "+10%"
+    # 言語選択
+    st.subheader("🌐 言語選択 / Language")
+    selected_lang = st.selectbox("ターゲット言語", list(LANG_CONFIG.keys()))
+    lang_conf = LANG_CONFIG[selected_lang]
+    st.info(f"出力言語: {lang_conf['prompt_target']}")
 
-    # --- 辞書機能 (Sidebar) ---
+    # 辞書機能
     st.divider()
-    st.subheader("📖 辞書登録")
-    st.caption("よく間違える読み方を登録すると、AIが学習します。(例: 豚肉 -> ぶたにく)")
-    
-    # 辞書のロード
+    st.subheader("📖 辞書登録 (Learning)")
     user_dict = load_dictionary()
     
-    # 新規登録
     with st.form("dict_form", clear_on_submit=True):
         c_word, c_read = st.columns(2)
-        new_word = c_word.text_input("単語", placeholder="例: 辛口")
-        new_read = c_read.text_input("読み", placeholder="例: からくち")
+        new_word = c_word.text_input("単語 (Word)", placeholder="例: 辛口")
+        new_read = c_read.text_input("読み (Reading)", placeholder="例: からくち")
         if st.form_submit_button("➕ 追加"):
             if new_word and new_read:
                 user_dict[new_word] = new_read
@@ -357,7 +382,6 @@ with st.sidebar:
                 st.success(f"「{new_word}」を登録しました！")
                 st.rerun()
 
-    # 登録済みリスト（削除機能）
     if user_dict:
         with st.expander(f"登録済み単語 ({len(user_dict)})"):
             for word, read in list(user_dict.items()):
@@ -368,45 +392,52 @@ with st.sidebar:
                     save_dictionary(user_dict)
                     st.rerun()
 
-st.title("🎧 Menu Player Generator")
-st.caption("視覚障がいのある方のための、アクセシビリティに配慮した音声メニューを作成します。")
+    valid_models = []
+    target_model_name = None
+    if api_key:
+        try:
+            genai.configure(api_key=api_key)
+            all_models = list(genai.list_models())
+            valid_models = [m.name for m in all_models if 'generateContent' in m.supported_generation_methods]
+            default_idx = next((i for i, n in enumerate(valid_models) if "flash" in n), 0)
+            target_model_name = st.selectbox("AIモデル", valid_models, index=default_idx)
+        except: pass
+    
+    st.divider()
+    rate_value = "+10%"
 
-# 再撮影する画像のインデックスを保持するstate
+st.title("🎧 Menu Player Generator")
+st.caption("Multilingual Accessibility Menu Creator (Dictionary Enabled)")
+
 if 'retake_index' not in st.session_state: st.session_state.retake_index = None
 if 'captured_images' not in st.session_state: st.session_state.captured_images = []
 if 'camera_key' not in st.session_state: st.session_state.camera_key = 0
 if 'generated_result' not in st.session_state: st.session_state.generated_result = None
 if 'show_camera' not in st.session_state: st.session_state.show_camera = False
+if 'menu_data_draft' not in st.session_state: st.session_state.menu_data_draft = None
 
-# Step 1
-st.markdown("### 1. お店情報の入力")
+# Step 1 & 2
+st.markdown("### 1. お店情報の入力 / Store Info")
 c1, c2 = st.columns(2)
-with c1: store_name = st.text_input("🏠 店舗名（必須）", placeholder="例：カフェタナカ")
-with c2: menu_title = st.text_input("📖 今回のメニュー名 （任意）", placeholder="例：ランチ")
-
-map_url = st.text_input("📍 GoogleマップのURL（任意）", placeholder="例：https://maps.app.goo.gl/...")
-if map_url:
-    st.caption("※プレイヤーに地図へのアクセスボタンが表示されます。")
-
+with c1: store_name = st.text_input("🏠 店舗名 / Store Name", placeholder="e.g. Cafe Tanaka")
+with c2: menu_title = st.text_input("📖 メニュー名 / Menu Title", placeholder="e.g. Lunch Menu")
+map_url = st.text_input("📍 GoogleマップのURL (Option)", placeholder="https://maps.google.com/...")
 st.markdown("---")
-
-st.markdown("### 2. メニューの登録")
+st.markdown("### 2. メニューの登録 / Input Menu")
 input_method = st.radio("方法", ("📂 アルバムから", "📷 その場で撮影", "🌐 URL入力"), horizontal=True)
 
 final_image_list = []
 target_url = None
 
 if input_method == "📂 アルバムから":
-    uploaded_files = st.file_uploader("写真を選択", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Upload Images", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
     if uploaded_files: final_image_list.extend(uploaded_files)
-
 elif input_method == "📷 その場で撮影":
     if st.session_state.retake_index is not None:
         target_idx = st.session_state.retake_index
-        st.warning(f"No.{target_idx + 1} の画像を再撮影中...")
+        st.warning(f"Retaking No.{target_idx + 1} ...")
         retake_camera_key = f"retake_camera_{target_idx}_{st.session_state.camera_key}"
         camera_file = st.camera_input("写真を撮影する (取り直し)", key=retake_camera_key)
-        
         c1, c2 = st.columns(2, gap="large")
         with c1:
             if camera_file and st.button("✅ これで決定", type="primary", key="retake_confirm", use_container_width=True):
@@ -420,7 +451,6 @@ elif input_method == "📷 その場で撮影":
                 st.session_state.retake_index = None
                 st.session_state.show_camera = False
                 st.rerun()
-
     elif not st.session_state.show_camera:
         if st.button("📷 カメラ起動", type="primary"):
             st.session_state.show_camera = True
@@ -444,19 +474,17 @@ elif input_method == "📷 その場で撮影":
             if st.button("❌ 撮影を中止", use_container_width=True):
                 st.session_state.show_camera = False
                 st.rerun()
-            
     if st.session_state.captured_images:
         if st.session_state.retake_index is None and st.session_state.show_camera is False:
              if st.button("🗑️ 全て削除"):
                 st.session_state.captured_images = []
                 st.rerun()
         final_image_list.extend(st.session_state.captured_images)
-
 elif input_method == "🌐 URL入力":
     target_url = st.text_input("URL", placeholder="https://...")
 
 if final_image_list and st.session_state.retake_index is None:
-    st.markdown("###### ▼ 画像確認")
+    st.markdown("###### ▼ Image Preview")
     cols_per_row = 3
     for i in range(0, len(final_image_list), cols_per_row):
         cols = st.columns(cols_per_row, gap="medium")
@@ -480,46 +508,42 @@ if final_image_list and st.session_state.retake_index is None:
                             st.rerun()
 
 st.markdown("---")
+st.markdown("### 3. 音声メニューの作成 / Generate")
 
-st.markdown("### 3. 音声メニューの作成")
-disable_create = st.session_state.retake_index is not None
-if st.button("🎙️ 作成開始", type="primary", use_container_width=True, disabled=disable_create):
+if st.button("📝 原稿を作成 (Analysis)", type="primary", use_container_width=True, disabled=disable_create):
     if not (api_key and target_model_name and store_name):
-        st.error("設定や店舗名を確認してください"); st.stop()
+        st.error("設定や店舗名を確認してください / Check Settings"); st.stop()
     if not (final_image_list or target_url):
-        st.warning("画像かURLを入力してください"); st.stop()
+        st.warning("画像かURLを入力してください / Input Image or URL"); st.stop()
 
-    output_dir = os.path.abspath("menu_audio_album")
-    if os.path.exists(output_dir): shutil.rmtree(output_dir)
-    os.makedirs(output_dir)
-
-    with st.spinner('解析中...'):
+    with st.spinner(f'Analyzing & Translating to {selected_lang}...'):
         try:
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel(target_model_name)
             parts = []
             
-            # 辞書データの取得とJSON文字列化
+            target_lang_name = lang_conf["prompt_target"]
+            currency_unit = lang_conf["currency"]
             user_dict_str = json.dumps(user_dict, ensure_ascii=False)
             
             prompt = f"""
-            あなたは視覚障害者のためのメニュー読み上げデータ作成のプロです。
-            メニューの内容を解析し、聞きやすいように【5つ〜8つ程度の大きなカテゴリー】に分類してまとめてください。
+            あなたは視覚障害者のためのメニュー読み上げデータ作成のプロであり、翻訳の専門家です。
+            提供されたメニュー画像を解析し、内容を**【{target_lang_name}】**に翻訳・要約して出力してください。
             
             重要ルール:
-            1. メニュー項目1つごとに1つのカテゴリーを作らないこと。
-            2. 「前菜・サラダ」「メイン料理」「ご飯・麺」「ドリンク」「デザート」のようにグループ化する。
-            3. カテゴリー内のメニューは、挨拶などを抜きにして商品名と価格をテンポよく読み上げる文章にする。
-            4. 価格の数字には必ず「円」をつけて読み上げる（例：1000 -> 1000円）。
-            5. アレルギー、辛さ、量などの重要な注意書きは、省略せず商品名の後に補足して読み上げる。
+            1. 出力言語は必ず**【{target_lang_name}】**でおこなうこと。
+            2. メニューを5つ〜8つ程度のカテゴリーに分類する。
+            3. 商品名と価格をテンポよく読み上げる文章にする。
+            4. 価格の数字は日本の通貨のまま、**{currency_unit}** (またはその言語での読み方) をつけて読み上げる。
+            5. アレルギーや辛さなどの注意書きも翻訳して補足する。
             
             ★重要：以下の固有名詞・読み方辞書を必ず守ってください。
             {user_dict_str}
 
             出力フォーマット（JSONのみ）:
             [
-              {{"title": "カテゴリー名（例：前菜・サラダ）", "text": "読み上げ文（例：まずは前菜です。シーザーサラダ800円。ポテトサラダ500円。なお、ドレッシングは別添え可能です。）"}},
-              {{"title": "カテゴリー名（例：メイン料理）", "text": "読み上げ文（例：続いてメインです。ハンバーグ定食1200円。ステーキ1500円。ご飯の大盛りは無料です。）"}}
+              {{"title": "カテゴリー名({target_lang_name})", "text": "読み上げ文({target_lang_name})..."}},
+              {{"title": "カテゴリー名({target_lang_name})", "text": "読み上げ文({target_lang_name})..."}}
             ]
             """
             
@@ -547,59 +571,66 @@ if st.button("🎙️ 作成開始", type="primary", use_container_width=True, d
             if start == -1: st.error("解析エラー"); st.stop()
             menu_data = json.loads(text_resp[start:end])
 
-            intro_t = f"こんにちは、{store_name}です。"
-            if menu_title: intro_t += f"ただいまより{menu_title}をご紹介します。"
-            intro_t += "このプレイヤーは、スクリーンリーダーでの操作に対応しています。"
-            intro_t += f"このメニューは、全部で{len(menu_data)}つのカテゴリーに分かれています。まずは目次です。"
+            intro_t = lang_conf["intro_template"].format(store=store_name, title=menu_title if menu_title else "")
+            intro_t += lang_conf["intro_index_msg"].format(count=len(menu_data))
             
-            for i, tr in enumerate(menu_data): 
-                intro_t += f"{i+1}、{tr['title']}。"
-                
-            intro_t += "それではどうぞ。"
-            menu_data.insert(0, {"title": "はじめに・目次", "text": intro_t})
-
-            progress_bar = st.progress(0)
-            st.info("音声を生成しています... (並列処理中)")
-            generated_tracks = asyncio.run(process_all_tracks_fast(menu_data, output_dir, voice_code, rate_value, progress_bar))
-
-            html_str = create_standalone_html_player(store_name, generated_tracks, map_url)
+            for i, tr in enumerate(menu_data):
+                # i=0(1番目) -> "1. タイトル"
+                intro_t += f"{i+1}. {tr['title']}. "
             
-            d_str = datetime.now().strftime('%Y%m%d')
-            s_name = sanitize_filename(store_name)
-            zip_name = f"{s_name}_{d_str}.zip"
-            zip_path = os.path.abspath(zip_name)
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
-                for root, dirs, files in os.walk(output_dir):
-                    for file in files: z.write(os.path.join(root, file), file)
+            intro_t += lang_conf["intro_closing"]
 
-            with open(zip_path, "rb") as f:
-                zip_data = f.read()
+            menu_data.insert(0, {"title": lang_conf['intro_title'], "text": intro_t})
+            
+            st.session_state.menu_data_draft = menu_data
+            st.rerun()
 
-            st.session_state.generated_result = {
-                "zip_data": zip_data,
-                "zip_name": zip_name,
-                "html_content": html_str, 
-                "html_name": f"{s_name}_player.html",
-                "tracks": generated_tracks
-            }
-            st.balloons()
-        except Exception as e: st.error(f"エラー: {e}")
+        except Exception as e: st.error(f"Error: {e}")
+
+if st.session_state.menu_data_draft is not None:
+    st.info("👇 以下の原稿を確認・編集してください。")
+    edited_data = st.data_editor(st.session_state.menu_data_draft, num_rows="dynamic", use_container_width=True)
+    
+    if st.button("🎙️ 音声を生成 (Generate Audio)", type="primary", use_container_width=True):
+        output_dir = os.path.abspath("menu_audio_album")
+        if os.path.exists(output_dir): shutil.rmtree(output_dir)
+        os.makedirs(output_dir)
+        
+        progress_bar = st.progress(0)
+        st.info(f"Generating Audio in {selected_lang}...")
+        
+        generated_tracks = asyncio.run(process_all_tracks_fast(edited_data, output_dir, lang_conf["voice"], rate_value, progress_bar))
+        html_str = create_standalone_html_player(store_name, edited_data, lang_conf, map_url)
+        
+        d_str = datetime.now().strftime('%Y%m%d')
+        s_name = sanitize_filename(store_name)
+        zip_name = f"{s_name}_{sanitize_filename(selected_lang)}_{d_str}.zip"
+        zip_path = os.path.abspath(zip_name)
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for root, dirs, files in os.walk(output_dir):
+                for file in files: z.write(os.path.join(root, file), file)
+
+        with open(zip_path, "rb") as f:
+            zip_data = f.read()
+
+        st.session_state.generated_result = {
+            "zip_data": zip_data,
+            "zip_name": zip_name,
+            "html_content": html_str, 
+            "html_name": f"{s_name}_{sanitize_filename(selected_lang)}_player.html",
+            "tracks": generated_tracks,
+            "lang_conf": lang_conf
+        }
+        st.rerun()
 
 if st.session_state.generated_result:
     res = st.session_state.generated_result
     st.divider()
-    st.subheader("▶️ プレビュー")
-    render_preview_player(res["tracks"])
+    st.subheader("▶️ Preview")
+    render_preview_player(res["tracks"], res["lang_conf"])
     st.divider()
-    st.subheader("📥 保存")
-    
-    st.info(
-        """
-        **Webプレイヤー**：アクセシビリティ対応済みのHTMLファイルです。スマホへの保存やLINE共有に便利です。  
-        **ZIPファイル**：PCでの保存や、My Menu Bookへの追加にご利用ください。
-        """
-    )
-    
+    st.subheader("📥 Download")
+    st.info("Web Player & ZIP File")
     c1, c2 = st.columns(2)
-    with c1: st.download_button(f"🌐 Webプレイヤー ({res['html_name']})", res['html_content'], res['html_name'], "text/html", type="primary")
-    with c2: st.download_button(f"📦 ZIPファイル ({res['zip_name']})", data=res["zip_data"], file_name=res['zip_name'], mime="application/zip")
+    with c1: st.download_button(f"🌐 Web Player ({res['html_name']})", res['html_content'], res['html_name'], "text/html", type="primary")
+    with c2: st.download_button(f"📦 ZIP File ({res['zip_name']})", data=res["zip_data"], file_name=res['zip_name'], mime="application/zip")

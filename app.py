@@ -173,7 +173,7 @@ def create_standalone_html_player(store_name, menu_data, lang_settings, map_url=
         </div>
         """
 
-    # HTMLテンプレート（f-stringを使わない方式に変更）
+    # HTMLテンプレート
     html_template = """<!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>__STORE_NAME__</title>
 <style>
@@ -509,6 +509,10 @@ if final_image_list and st.session_state.retake_index is None:
 
 st.markdown("---")
 st.markdown("### 3. 音声メニューの作成 / Generate")
+
+# --- 修正箇所: ここで disable_create を定義します ---
+disable_create = not (final_image_list or target_url)
+# ------------------------------------------------
 
 if st.button("📝 原稿を作成 (Analysis)", type="primary", use_container_width=True, disabled=disable_create):
     if not (api_key and target_model_name and store_name):

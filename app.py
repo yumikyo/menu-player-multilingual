@@ -93,8 +93,8 @@ LANG_SETTINGS = {
         "rate_value": "+0%",
         "ui": {
             "title": "카테고리", "text": "설명", "loading": "로딩 중...", "speed": "속도",
-            "map_btn": "🗺️ 지도 보기 (Google Map)", "intro": "안녕하세요.", "toc": "목차입니다.",
-            "outro": "천천히 골라주세요.", "file_code": "ko", "currency": "엔"
+            "map_btn": "🗺️ 지도 보기 (Google Map)", "intro": "안녕하세요。", "toc": "목차입니다。",
+            "outro": "천천히 골라주세요。", "file_code": "ko", "currency": "엔"
         }
     }
 }
@@ -191,59 +191,12 @@ def create_standalone_html_player(store_name, menu_data, map_url="", lang_key="J
         </div>
         """
     
-    # HTMLテンプレート（アクセシビリティ強化済みのものを使用）
-    html_template = f"""<!DOCTYPE html>
-<html lang="{LANG_SETTINGS[lang_key]['code']}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>__STORE_NAME__ {ui['title']}</title>
-<style>
-body{{font-family:sans-serif;background:#f4f4f4;margin:0;padding:20px;line-height:1.6;}}
-.c{{max-width:600px;margin:0 auto;background:#fff;padding:20px;border-radius:15px;box-shadow:0 2px 10px rgba(0,0,0,0.1);}}
-h1{{text-align:center;font-size:1.5em;color:#333;margin-bottom:10px;}}
-h2{{font-size:1.2em;color:#555;margin-top:20px;margin-bottom:10px;border-bottom:2px solid #eee;padding-bottom:5px;}}
-.box{{background:#fff5f5;border:2px solid #ff4b4b;border-radius:10px;padding:15px;text-align:center;margin-bottom:20px;}}
-.ti{{font-size:1.3em;font-weight:bold;color:#b71c1c;}}
-.ctrl{{display:flex;gap:15px;margin:20px 0;justify-content:center;}}
-button{{
-    flex:1; padding:15px 0; font-size:1.8em; font-weight:bold; color:#fff; background:#ff4b4b; border:none; border-radius:8px; cursor:pointer; min-height:60px;
-    display:flex; justify-content:center; align-items:center; transition:background 0.2s;
-}}
-button:hover{{background:#e04141;}}
-button:focus, .map-btn:focus, select:focus, .itm:focus{{outline:3px solid #333; outline-offset: 2px;}}
-.map-btn{{display:inline-block; padding:12px 20px; background-color:#4285F4; color:white; text-decoration:none; border-radius:8px; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.2);}}
-.lst{{border-top:1px solid #eee;padding-top:10px;}}
-.itm{{padding:15px;border-bottom:1px solid #eee;cursor:pointer; font-size:1.1em;}}
-.itm:hover{{background:#f9f9f9;}}
-.itm.active{{background:#ffecec;color:#b71c1c;font-weight:bold;border-left:5px solid #ff4b4b;}}
-</style></head>
-<body>
-<main class="c" role="main">
-    <h1>🎧 __STORE_NAME__</h1>
-    __MAP_BUTTON__
-    <section aria-label="{ui['loading']}">
-        <div class="box"><div class="ti" id="ti" aria-live="polite">{ui['loading']}</div></div>
-    </section>
-    <audio id="au" style="width:100%" aria-label="{ui['title']} {ui['text']}プレイヤー"></audio>
-    <section class="ctrl" aria-label="{ui['title']}コントロール">
-        <button onclick="prev()" aria-label="{ui['text']}前のチャプターへ">⏮</button>
-        <button onclick="toggle()" id="pb" aria-label="{ui['text']}再生">▶</button>
-        <button onclick="next()" aria-label="{ui['text']}次のチャプターへ">⏭</button>
-    </section>
-    <div style="text-align:center;margin-bottom:20px;">
-        <label for="sp" style="font-weight:bold; margin-right:5px;">{ui['speed']}:</label>
-        <select id="sp" onchange="csp()" style="font-size:1rem; padding:5px;">
-            <option value="0.8">0.8 ({'Slow' if lang_key != 'Japanese' else 'ゆっくり'})</option>
-            <option value="1.0" selected>1.0 ({'Standard' if lang_key != 'Japanese' else '標準'})</option>
-            <option value="1.2">1.2 ({'Fast' if lang_key != 'Japanese' else 'やや速い'})</option>
-            <option value="1.5">1.5 ({'Very Fast' if lang_key != 'Japanese' else '速い'})</option>
-        </select>
-    </div>
-    <h2>📜 {ui['toc']}</h2>
-    <div id="ls" class="lst" role="list" aria-label="{ui['title']}一覧"></div>
-</main>
-<script>
-const pl=__PLAYLIST_JSON__;let idx=0;
-const au=document.getElementById('au');
-const ti=document.getElementById('ti');
-const pb=document.getElementById('pb');
+    # JavaScriptの変数定義をPython f文字列から切り離し、テンプレート変数に変換
+    js_script = f"""
+const pl = __PLAYLIST_JSON__; let idx = 0;
+const au = document.getElementById('au');
+const ti = document.getElementById('ti');
+const pb = document.getElementById('pb');
 const langKey = "{lang_key}";
 const pauseLabel = "{'一時停止' if lang_key == 'Japanese' else 'Pause' if lang_key == 'English (UK)' else '暂停' if lang_key == 'Chinese' else '일시정지'}";
 const playLabel = "{'再生' if lang_key == 'Japanese' else 'Play' if lang_key == 'English (UK)' else '播放' if lang_key == 'Chinese' else '재생'}";
@@ -313,11 +266,64 @@ function ren(){{
     }});
 }}
 init();
+""" # 修正したJavaScriptを定義
+
+    # HTMLテンプレートにJavaScriptを埋め込む
+    html_template = f"""<!DOCTYPE html>
+<html lang="{LANG_SETTINGS[lang_key]['code']}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>__STORE_NAME__ {ui['title']}</title>
+<style>
+body{{font-family:sans-serif;background:#f4f4f4;margin:0;padding:20px;line-height:1.6;}}
+.c{{max-width:600px;margin:0 auto;background:#fff;padding:20px;border-radius:15px;box-shadow:0 2px 10px rgba(0,0,0,0.1);}}
+h1{{text-align:center;font-size:1.5em;color:#333;margin-bottom:10px;}}
+h2{{font-size:1.2em;color:#555;margin-top:20px;margin-bottom:10px;border-bottom:2px solid #eee;padding-bottom:5px;}}
+.box{{background:#fff5f5;border:2px solid #ff4b4b;border-radius:10px;padding:15px;text-align:center;margin-bottom:20px;}}
+.ti{{font-size:1.3em;font-weight:bold;color:#b71c1c;}}
+.ctrl{{display:flex;gap:15px;margin:20px 0;justify-content:center;}}
+button{{
+    flex:1; padding:15px 0; font-size:1.8em; font-weight:bold; color:#fff; background:#ff4b4b; border:none; border-radius:8px; cursor:pointer; min-height:60px;
+    display:flex; justify-content:center; align-items:center; transition:background 0.2s;
+}}
+button:hover{{background:#e04141;}}
+button:focus, .map-btn:focus, select:focus, .itm:focus{{outline:3px solid #333; outline-offset: 2px;}}
+.map-btn{{display:inline-block; padding:12px 20px; background-color:#4285F4; color:white; text-decoration:none; border-radius:8px; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.2);}}
+.lst{{border-top:1px solid #eee;padding-top:10px;}}
+.itm{{padding:15px;border-bottom:1px solid #eee;cursor:pointer; font-size:1.1em;}}
+.itm:hover{{background:#f9f9f9;}}
+.itm.active{{background:#ffecec;color:#b71c1c;font-weight:bold;border-left:5px solid #ff4b4b;}}
+</style></head>
+<body>
+<main class="c" role="main">
+    <h1>🎧 __STORE_NAME__</h1>
+    __MAP_BUTTON__
+    <section aria-label="{ui['loading']}">
+        <div class="box"><div class="ti" id="ti" aria-live="polite">{ui['loading']}</div></div>
+    </section>
+    <audio id="au" style="width:100%" aria-label="{ui['title']} {ui['text']}プレイヤー"></audio>
+    <section class="ctrl" aria-label="{ui['title']}コントロール">
+        <button onclick="prev()" aria-label="{ui['text']}前のチャプターへ">⏮</button>
+        <button onclick="toggle()" id="pb" aria-label="{ui['text']}再生">▶</button>
+        <button onclick="next()" aria-label="{ui['text']}次のチャプターへ">⏭</button>
+    </section>
+    <div style="text-align:center;margin-bottom:20px;">
+        <label for="sp" style="font-weight:bold; margin-right:5px;">{ui['speed']}:</label>
+        <select id="sp" onchange="csp()" style="font-size:1rem; padding:5px;">
+            <option value="0.8">0.8 ({'Slow' if lang_key != 'Japanese' else 'ゆっくり'})</option>
+            <option value="1.0" selected>1.0 ({'Standard' if lang_key != 'Japanese' else '標準'})</option>
+            <option value="1.2">1.2 ({'Fast' if lang_key != 'Japanese' else 'やや速い'})</option>
+            <option value="1.5">1.5 ({'Very Fast' if lang_key != 'Japanese' else '速い'})</option>
+        </select>
+    </div>
+    <h2>📜 {ui['toc']}</h2>
+    <div id="ls" class="lst" role="list" aria-label="{ui['title']}一覧"></div>
+</main>
+<script>
+__JS_SCRIPT__
 </script></body></html>"""
     
     final_html = html_template.replace("__STORE_NAME__", store_name)
     final_html = final_html.replace("__PLAYLIST_JSON__", playlist_json_str)
     final_html = final_html.replace("__MAP_BUTTON__", map_button_html)
+    final_html = final_html.replace("__JS_SCRIPT__", js_script) # JavaScriptを埋め込み
     return final_html
 
 # プレビュー用プレイヤー
@@ -331,6 +337,34 @@ def render_preview_player(tracks, lang_key):
                 playlist_data.append({"title": track['title'],"src": f"data:audio/mp3;base64,{b64}"})
     playlist_json = json.dumps(playlist_data)
     
+    # JavaScriptの変数定義をPython f文字列から切り離し、テンプレート変数に変換
+    js_script = f"""
+    const pl=__PLAYLIST__;let x=0;const au=document.getElementById('au');const ti=document.getElementById('ti');const pb=document.getElementById('pb');const ls=document.getElementById('ls');
+    const langKey = "{lang_key}";
+    const pauseLabel = "{'一時停止' if lang_key == 'Japanese' else 'Pause' if lang_key == 'English (UK)' else '暂停' if lang_key == 'Chinese' else '일시정지'}";
+    const playLabel = "{'再生' if lang_key == 'Japanese' else 'Play' if lang_key == 'English (UK)' else '播放' if lang_key == 'Chinese' else '재생'}";
+    function init(){{rn();ld(0);sp();}}
+    function ld(i){{x=i;au.src=pl[x].src;ti.innerText=pl[x].title;rn();sp();}}
+    function tg(){{if(au.paused){{au.play();pb.innerText="⏸";pb.setAttribute("aria-label", pauseLabel);}}else{{au.pause();pb.innerText="▶";pb.setAttribute("aria-label", playLabel);}}}}
+    function nx(){{if(x<pl.length-1){{ld(x+1);au.play();pb.innerText="⏸";pb.setAttribute("aria-label", pauseLabel);}}}}
+    function pv(){{if(x>0){{ld(x-1);au.play();pb.innerText="⏸";pb.setAttribute("aria-label", pauseLabel);}}}}
+    function sp(){{au.playbackRate=parseFloat(document.getElementById('sp').value);}}
+    au.onended=function(){{if(x<pl.length-1)nx();else{{pb.innerText="▶";pb.setAttribute("aria-label", playLabel);}}}};
+    function getLabel(t, i){{
+        if (i === 0) return t.title;
+        if (langKey === 'Japanese') return i + "、" + t.title;
+        if (langKey === 'English (UK)') return "Chapter " + i + ". " + t.title;
+        return i + ". " + t.title;
+    }}
+    function rn(){{ls.innerHTML="";pl.forEach((t,i)=>{
+        const d=document.createElement('div');
+        d.className="it "+(i===x?"active":"");
+        let l=getLabel(t, i);
+        d.innerText=l;
+        d.setAttribute("role","listitem");d.setAttribute("tabindex","0");d.onclick=()=>{ld(i);au.play();pb.innerText="⏸";pb.setAttribute("aria-label", pauseLabel);};d.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' '){{e.preventDefault();d.click();}}};ls.appendChild(d);});}}
+    init();
+    """
+
     html_template = f"""<!DOCTYPE html><html><head><style>
     body{{margin:0;padding:0;font-family:sans-serif;}}
     .p-box{{border:2px solid #e0e0e0;border-radius:12px;padding:15px;background:#fcfcfc;text-align:center;}}
@@ -359,31 +393,11 @@ def render_preview_player(tracks, lang_key):
     </div>
     <div id="ls" class="lst" role="list"></div></div>
     <script>
-    const pl=__PLAYLIST__;let x=0;const au=document.getElementById('au');const ti=document.getElementById('ti');const pb=document.getElementById('pb');const ls=document.getElementById('ls');
-    const langKey = "{lang_key}";
-    const pauseLabel = "{'一時停止' if lang_key == 'Japanese' else 'Pause' if lang_key == 'English (UK)' else '暂停' if lang_key == 'Chinese' else '일시정지'}";
-    const playLabel = "{'再生' if lang_key == 'Japanese' else 'Play' if lang_key == 'English (UK)' else '播放' if lang_key == 'Chinese' else '재생'}";
-    function init(){{rn();ld(0);sp();}}
-    function ld(i){{x=i;au.src=pl[x].src;ti.innerText=pl[x].title;rn();sp();}}
-    function tg(){{if(au.paused){{au.play();pb.innerText="⏸";pb.setAttribute("aria-label", pauseLabel);}}else{{au.pause();pb.innerText="▶";pb.setAttribute("aria-label", playLabel);}}}}
-    function nx(){{if(x<pl.length-1){{ld(x+1);au.play();pb.innerText="⏸";pb.setAttribute("aria-label", pauseLabel);}}}}
-    function pv(){{if(x>0){{ld(x-1);au.play();pb.innerText="⏸";pb.setAttribute("aria-label", pauseLabel);}}}}
-    function sp(){{au.playbackRate=parseFloat(document.getElementById('sp').value);}}
-    au.onended=function(){{if(x<pl.length-1)nx();else{{pb.innerText="▶";pb.setAttribute("aria-label", playLabel);}}}};
-    function getLabel(t, i){
-        if (i === 0) return t.title;
-        if (langKey === 'Japanese') return i + "、" + t.title;
-        if (langKey === 'English (UK)') return "Chapter " + i + ". " + t.title;
-        return i + ". " + t.title;
-    }
-    function rn(){{ls.innerHTML="";pl.forEach((t,i)=>{
-        const d=document.createElement('div');
-        d.className="it "+(i===x?"active":"");
-        let l=getLabel(t, i);
-        d.innerText=l;
-        d.setAttribute("role","listitem");d.setAttribute("tabindex","0");d.onclick=()=>{ld(i);au.play();pb.innerText="⏸";pb.setAttribute("aria-label", pauseLabel);};d.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' '){{e.preventDefault();d.click();}}};ls.appendChild(d);});}}
-    init();</script></body></html>"""
+    __JS_PREVIEW_SCRIPT__
+    </script></body></html>"""
+    
     final_html = html_template.replace("__PLAYLIST__", playlist_json)
+    final_html = final_html.replace("__JS_PREVIEW_SCRIPT__", js_script)
     components.html(final_html, height=450)
 
 # --- UI ---
@@ -552,12 +566,12 @@ if final_image_list and st.session_state.retake_index is None:
                 if input_method == "📷 その場で撮影" and img in st.session_state.captured_images:
                     c_retake, c_delete = st.columns(2, gap="small")
                     with c_retake:
-                        if st.button("🔄 撮り直す", key=f"btn_retake_{global_idx}", use_container_width=True):
+                        if st.button("🔄 撮り直す", key=f"btn_retake_{global_idx}"):
                             st.session_state.retake_index = global_idx
                             st.session_state.show_camera = True
                             st.rerun()
                     with c_delete:
-                        if st.button("🗑️ 削除", key=f"btn_delete_{global_idx}", use_container_width=True):
+                        if st.button("🗑️ 削除", key=f"btn_delete_{global_idx}"):
                             st.session_state.captured_images.pop(global_idx)
                             st.session_state.retake_index = None
                             st.session_state.show_camera = False

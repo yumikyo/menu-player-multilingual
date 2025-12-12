@@ -392,17 +392,7 @@ with st.sidebar:
                     save_dictionary(user_dict)
                     st.rerun()
 
-    valid_models = []
-    target_model_name = None
-    if api_key:
-        try:
-            genai.configure(api_key=api_key)
-            all_models = list(genai.list_models())
-            valid_models = [m.name for m in all_models if 'generateContent' in m.supported_generation_methods]
-            default_idx = next((i for i, n in enumerate(valid_models) if "flash" in n), 0)
-            target_model_name = st.selectbox("AIモデル", valid_models, index=default_idx)
-        except: pass
-    
+    # AIモデル選択は不要になりますが、念のため残しておきます
     st.divider()
     rate_value = "+10%"
 
@@ -416,14 +406,17 @@ if 'generated_result' not in st.session_state: st.session_state.generated_result
 if 'show_camera' not in st.session_state: st.session_state.show_camera = False
 if 'menu_data_draft' not in st.session_state: st.session_state.menu_data_draft = None
 
-# Step 1 & 2
+# Step 1
 st.markdown("### 1. お店情報の入力 / Store Info")
 c1, c2 = st.columns(2)
 with c1: store_name = st.text_input("🏠 店舗名 / Store Name", placeholder="e.g. Cafe Tanaka")
 with c2: menu_title = st.text_input("📖 メニュー名 / Menu Title", placeholder="e.g. Lunch Menu")
 map_url = st.text_input("📍 GoogleマップのURL (Option)", placeholder="https://maps.google.com/...")
+
+# Step 2: 画像入力（参照用として残しますが、AI生成には使用しません）
 st.markdown("---")
-st.markdown("### 2. メニューの登録 / Input Menu")
+st.markdown("### 2. メニュー画像 / Image Reference (Option)")
+st.caption("手動入力の参考に画像を表示できます / You can display images for reference.")
 input_method = st.radio("方法", ("📂 アルバムから", "📷 その場で撮影", "🌐 URL入力"), horizontal=True)
 
 final_image_list = []
@@ -510,92 +503,25 @@ if final_image_list and st.session_state.retake_index is None:
 st.markdown("---")
 st.markdown("### 3. 音声メニューの作成 / Generate")
 
-# --- 修正箇所: ここで disable_create を定義します ---
-disable_create = not (final_image_list or target_url)
-# ------------------------------------------------
-
-if st.button("📝 原稿を作成 (Analysis)", type="primary", use_container_width=True, disabled=disable_create):
-    if not (api_key and target_model_name and store_name):
-        st.error("設定や店舗名を確認してください / Check Settings"); st.stop()
-    if not (final_image_list or target_url):
-        st.warning("画像かURLを入力してください / Input Image or URL"); st.stop()
-
-    with st.spinner(f'Analyzing & Translating to {selected_lang}...'):
-        try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(target_model_name)
-            parts = []
-            
-            target_lang_name = lang_conf["prompt_target"]
-            currency_unit = lang_conf["currency"]
-            user_dict_str = json.dumps(user_dict, ensure_ascii=False)
-            
-            prompt = f"""
-            あなたは視覚障害者のためのメニュー読み上げデータ作成のプロであり、翻訳の専門家です。
-            提供されたメニュー画像を解析し、内容を**【{target_lang_name}】**に翻訳・要約して出力してください。
-            
-            重要ルール:
-            1. 出力言語は必ず**【{target_lang_name}】**でおこなうこと。
-            2. メニューを5つ〜8つ程度のカテゴリーに分類する。
-            3. 商品名と価格をテンポよく読み上げる文章にする。
-            4. 価格の数字は日本の通貨のまま、**{currency_unit}** (またはその言語での読み方) をつけて読み上げる。
-            5. アレルギーや辛さなどの注意書きも翻訳して補足する。
-            
-            ★重要：以下の固有名詞・読み方辞書を必ず守ってください。
-            {user_dict_str}
-
-            出力フォーマット（JSONのみ）:
-            [
-              {{"title": "カテゴリー名({target_lang_name})", "text": "読み上げ文({target_lang_name})..."}},
-              {{"title": "カテゴリー名({target_lang_name})", "text": "読み上げ文({target_lang_name})..."}}
-            ]
-            """
-            
-            if final_image_list:
-                parts.append(prompt)
-                for f in final_image_list:
-                    f.seek(0)
-                    parts.append({"mime_type": f.type if hasattr(f, 'type') else 'image/jpeg', "data": f.getvalue()})
-            elif target_url:
-                web_text = fetch_text_from_url(target_url)
-                if not web_text: st.error("URLエラー"); st.stop()
-                parts.append(prompt + f"\n\n{web_text[:30000]}")
-
-            resp = None
-            for _ in range(3):
-                try: resp = model.generate_content(parts); break
-                except exceptions.ResourceExhausted: time.sleep(5)
-                except: pass
-
-            if not resp: st.error("失敗しました"); st.stop()
-
-            text_resp = resp.text
-            start = text_resp.find('[')
-            end = text_resp.rfind(']') + 1
-            if start == -1: st.error("解析エラー"); st.stop()
-            menu_data = json.loads(text_resp[start:end])
-
-            intro_t = lang_conf["intro_template"].format(store=store_name, title=menu_title if menu_title else "")
-            intro_t += lang_conf["intro_index_msg"].format(count=len(menu_data))
-            
-            for i, tr in enumerate(menu_data):
-                # i=0(1番目) -> "1. タイトル"
-                intro_t += f"{i+1}. {tr['title']}. "
-            
-            intro_t += lang_conf["intro_closing"]
-
-            menu_data.insert(0, {"title": lang_conf['intro_title'], "text": intro_t})
-            
-            st.session_state.menu_data_draft = menu_data
-            st.rerun()
-
-        except Exception as e: st.error(f"Error: {e}")
-
-if st.session_state.menu_data_draft is not None:
-    st.info("👇 以下の原稿を確認・編集してください。")
-    edited_data = st.data_editor(st.session_state.menu_data_draft, num_rows="dynamic", use_container_width=True)
+# --- AI生成ボタンを削除し、手動入力用データを初期化 ---
+if st.session_state.menu_data_draft is None:
+    # デフォルトのテンプレートを作成
+    intro_t = lang_conf["intro_template"].format(store=store_name if store_name else "お店", title=menu_title if menu_title else "メニュー")
+    intro_t += "ここには挨拶文が入ります。" + lang_conf["intro_closing"]
     
-    if st.button("🎙️ 音声を生成 (Generate Audio)", type="primary", use_container_width=True):
+    st.session_state.menu_data_draft = [
+        {"title": lang_conf['intro_title'], "text": intro_t},
+        {"title": "カテゴリ1", "text": "商品名1、1000円。商品名2、1200円。"},
+        {"title": "カテゴリ2", "text": "商品名3、800円。"}
+    ]
+
+st.info("👇 以下の表に、読み上げたいタイトルとテキストを入力してください。行を追加・削除できます。")
+edited_data = st.data_editor(st.session_state.menu_data_draft, num_rows="dynamic", use_container_width=True)
+
+if st.button("🎙️ 音声を生成 (Generate Audio)", type="primary", use_container_width=True):
+    if not store_name:
+        st.error("店舗名を入力してください / Please input Store Name")
+    else:
         output_dir = os.path.abspath("menu_audio_album")
         if os.path.exists(output_dir): shutil.rmtree(output_dir)
         os.makedirs(output_dir)

@@ -334,7 +334,7 @@ def render_preview_player(tracks, lang_key):
     for track in tracks:
         if os.path.exists(track['path']):
             with open(track['path'], "rb") as f:
-                b64 = base64.b64encode(f.read()).decode()
+                b64_data = base64.b64encode(f.read()).decode()
                 playlist_data.append({"title": track['title'],"src": f"data:audio/mp3;base64,{b64}"})
     playlist_json = json.dumps(playlist_data)
     
@@ -446,7 +446,6 @@ st.caption(f"アクセシビリティに配慮した音声メニューを{select
 
 if 'retake_index' not in st.session_state: st.session_state.retake_index = None
 if 'captured_images' not in st.session_state: st.session_state.captured_images = []
-if 'camera_key' not in st.session_state: st.session_state.camera_key = 0
 if 'generated_result' not in st.session_state: st.session_state.generated_result = None
 if 'show_camera' not in st.session_state: st.session_state.show_camera = False
 
@@ -468,57 +467,104 @@ if input_method == "📂 アルバムから":
     if uploaded_files: final_image_list.extend(uploaded_files)
 
 elif input_method == "📷 その場で撮影":
+    # 再撮影ロジック
     if st.session_state.retake_index is not None:
-        st.warning("再撮影中...")
-        cam = st.camera_input("撮影", key=f"retake_{st.session_state.camera_key}")
-        if cam and st.button("✅ 決定"):
-            st.session_state.captured_images[st.session_state.retake_index] = cam
-            st.session_state.retake_index = None
-            st.session_state.camera_key += 1
-            st.rerun()
+        target_idx = st.session_state.retake_index
+        st.warning(f"No.{target_idx + 1} の画像を再撮影中...")
+        # 再撮影は頻度が低いのでキーを変えても許容（確実に更新するため）
+        retake_key = f"retake_{target_idx}_{int(time.time())}"
+        cam = st.camera_input("再撮影", key=retake_key)
+        
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            if cam and st.button("✅ 決定", key="confirm_retake", use_container_width=True):
+                st.session_state.captured_images[target_idx] = cam
+                st.session_state.retake_index = None
+                st.rerun()
+        with rc2:
+            if st.button("❌ キャンセル", key="cancel_retake", use_container_width=True):
+                st.session_state.retake_index = None
+                st.rerun()
+
+    # 通常撮影ロジック
     elif not st.session_state.show_camera:
         if st.button("📷 カメラ起動", type="primary"):
             st.session_state.show_camera = True
             st.rerun()
     else:
-        cam = st.camera_input("撮影", key=f"cam_{st.session_state.camera_key}")
-        c1, c2 = st.columns(2)
-        if cam:
-            if c1.button("⬇️ 追加して次"):
-                st.session_state.captured_images.append(cam)
-                st.session_state.camera_key += 1
-                st.rerun()
-            if c2.button("✅ 追加して終了"):
-                st.session_state.captured_images.append(cam)
-                st.session_state.show_camera = False
-                st.session_state.camera_key += 1
-                st.rerun()
+        # ★カメラIDを固定して再アクセスを防ぐ★
+        cam = st.camera_input("撮影", key="menu_camera_fixed")
+        
+        # すでにリストにある最後の画像と同じかチェック（連打防止）
+        is_new = True
+        if cam is not None and st.session_state.captured_images:
+            if st.session_state.captured_images[-1].getvalue() == cam.getvalue():
+                is_new = False
+        
+        if cam is not None:
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("⬇️ 追加して次を撮る", type="primary", use_container_width=True):
+                    if is_new:
+                        st.session_state.captured_images.append(cam)
+                        st.success("追加しました！次の写真を撮影してください。")
+                        time.sleep(1) # メッセージを見せる
+                        st.rerun()
+                    else:
+                        st.warning("同じ写真です。新しい写真を撮影してください。")
+            with c2:
+                if st.button("✅ 追加して終了", type="primary", use_container_width=True):
+                    if is_new:
+                        st.session_state.captured_images.append(cam)
+                    st.session_state.show_camera = False
+                    st.rerun()
         else:
-            if st.button("❌ 中止"):
+             if st.button("❌ 撮影を中止", use_container_width=True):
                 st.session_state.show_camera = False
                 st.rerun()
+
+    # 撮影済み画像リストへの追加（カメラモード中はここには表示せず、下の確認エリアで表示）
+    if not st.session_state.show_camera and st.session_state.captured_images:
+         final_image_list.extend(st.session_state.captured_images)
     
-    if st.session_state.captured_images:
+    # 全削除ボタン（カメラ外）
+    if st.session_state.captured_images and not st.session_state.show_camera and st.session_state.retake_index is None:
         if st.button("🗑️ 全て削除"):
             st.session_state.captured_images = []
             st.rerun()
-        final_image_list.extend(st.session_state.captured_images)
 
 elif input_method == "🌐 URL入力":
     target_url = st.text_input("URL", placeholder="https://...")
 
-if final_image_list and st.session_state.retake_index is None:
+# 画像一覧表示（カメラ起動中は、撮影済みのものを下に表示して確認できるようにする）
+current_images = final_image_list if input_method != "📷 その場で撮影" else st.session_state.captured_images
+
+if current_images and st.session_state.retake_index is None:
+    st.markdown("###### ▼ 画像確認")
     cols = st.columns(3)
-    for i, img in enumerate(final_image_list):
+    for i, img in enumerate(current_images):
         with cols[i % 3]:
-            st.image(img, caption=f"No.{i+1}")
+            st.image(img, caption=f"No.{i+1}", use_container_width=True)
+            # カメラモードかつ一覧表示中なら削除・再撮影ボタンを出す
+            if input_method == "📷 その場で撮影":
+                c_retake, c_del = st.columns(2)
+                with c_retake:
+                    if st.button("🔄", key=f"retake_btn_{i}"):
+                        st.session_state.retake_index = i
+                        st.session_state.show_camera = False # 再撮影モードへ
+                        st.rerun()
+                with c_del:
+                    if st.button("🗑️", key=f"del_btn_{i}"):
+                        st.session_state.captured_images.pop(i)
+                        st.rerun()
 
 st.markdown("---")
 st.markdown("### 3. 音声メニューの作成")
-if st.button("🎙️ 作成開始", type="primary", use_container_width=True, disabled=(st.session_state.retake_index is not None)):
+disable_create = (st.session_state.retake_index is not None) or (st.session_state.show_camera)
+if st.button("🎙️ 作成開始", type="primary", use_container_width=True, disabled=disable_create):
     if not (api_key and target_model_name and store_name):
         st.error("設定や店舗名を確認してください"); st.stop()
-    if not (final_image_list or target_url):
+    if not (current_images or target_url):
         st.warning("画像かURLを入力してください"); st.stop()
 
     output_dir = os.path.abspath("menu_audio_album")
@@ -561,9 +607,10 @@ if st.button("🎙️ 作成開始", type="primary", use_container_width=True, d
             ]
             """
             
-            if final_image_list:
+            # 画像リストは current_images を使う
+            if current_images:
                 parts.append(prompt)
-                for f in final_image_list:
+                for f in current_images:
                     f.seek(0)
                     parts.append({"mime_type": f.type if hasattr(f, 'type') else 'image/jpeg', "data": f.getvalue()})
             elif target_url:

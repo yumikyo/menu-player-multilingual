@@ -60,7 +60,7 @@ LANG_CONFIG = {
     },
     "English": {  # 表示はEnglish、中身はUK
         "voice": "en-GB-SoniaNeural", 
-        "prompt_target": "English (UK Style)", # スペル等をUK仕様に
+        "prompt_target": "English (UK Style)",
         "currency": "yen",
         "intro_template": "Hello, this is {store}. We would like to introduce our {title} menu.",
         "intro_index_msg": "This menu is divided into {count} categories. First, here is the index.",
@@ -115,7 +115,6 @@ async def generate_single_track_fast(text, filename, voice_code, rate_value):
                 return True
         except:
             await asyncio.sleep(1)
-    # gTTS fallback
     try:
         lang_code = voice_code[:2].lower()
         if "GB" in voice_code: lang_code = "en"
@@ -151,7 +150,7 @@ async def process_all_tracks_fast(menu_data, output_dir, voice_code, rate_value,
         progress_bar.progress(completed / total)
     return track_info_list
 
-# HTMLプレイヤー生成（多言語対応版）
+# HTMLプレイヤー生成（多言語対応・安全な文字列置換版）
 def create_standalone_html_player(store_name, menu_data, lang_settings, map_url=""):
     playlist_js = []
     for track in menu_data:
@@ -174,7 +173,7 @@ def create_standalone_html_player(store_name, menu_data, lang_settings, map_url=
         </div>
         """
 
-    # HTMLテンプレート（replace方式）
+    # HTMLテンプレート（f-stringを使わない方式に変更）
     html_template = """<!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>__STORE_NAME__</title>
 <style>
@@ -257,7 +256,7 @@ function ren(){
         m.setAttribute("role", "listitem");
         m.setAttribute("tabindex", "0");
         
-        // リスト番号付け: 0=Intro(なし), 1以降=1. 2.
+        // リスト番号付け
         let label = t.title;
         if(i > 0){ label = i + ". " + t.title; }
         
@@ -271,11 +270,12 @@ function ren(){
 init();
 </script></body></html>"""
     
+    # テンプレートの変数を置換
     html = html_template.replace("__STORE_NAME__", store_name)
     html = html.replace("__MAP_BUTTON__", map_button_html)
     html = html.replace("__PLAYLIST_JSON__", playlist_json_str)
     
-    # UI置換
+    # UIの言語変数を置換
     html = html.replace("__UI_LOADING__", ui['loading'])
     html = html.replace("__UI_PREV__", ui['prev'])
     html = html.replace("__UI_PLAY__", ui['play'])
@@ -373,8 +373,8 @@ with st.sidebar:
     
     with st.form("dict_form", clear_on_submit=True):
         c_word, c_read = st.columns(2)
-        new_word = c_word.text_input("単語 (Word)", placeholder="例: 辛口")
-        new_read = c_read.text_input("読み (Reading)", placeholder="例: からくち")
+        new_word = c_word.text_input("単語", placeholder="例: 辛口")
+        new_read = c_read.text_input("読み", placeholder="例: からくち")
         if st.form_submit_button("➕ 追加"):
             if new_word and new_read:
                 user_dict[new_word] = new_read

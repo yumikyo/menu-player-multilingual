@@ -22,7 +22,7 @@ from PIL import Image
 nest_asyncio.apply()
 
 # ページ設定
-st.set_page_config(page_title="Menu Player Generator (Multi-Lang)", layout="wide")
+st.set_page_config(page_title="Menu Player Generator", layout="wide")
 
 # CSSでボタンのスタイル調整（間隔確保）
 st.markdown("""
@@ -56,17 +56,17 @@ LANG_CONFIG = {
         "intro_index_msg": "このメニューは、全部で{count}つのカテゴリーに分かれています。まずは目次です。",
         "intro_closing": "それではどうぞ。",
         "intro_title": "はじめに・目次",
-        "ui": {"loading": "読み込み中...", "chapter": "チャプター一覧", "speed": "読み上げ速度", "map": "地図・アクセス", "play": "再生", "pause": "一時停止", "prev": "前へ", "next": "次へ", "slow": "ゆっくり", "normal": "標準", "fast": "速く"}
+        "ui": {"loading": "読み込み中...", "chapter": "チャプター一覧", "speed": "読み上げ速度", "map": "地図・アクセス (Google Map)", "play": "再生", "pause": "一時停止", "prev": "前へ", "next": "次へ", "slow": "ゆっくり", "normal": "標準", "fast": "速く"}
     },
-    "English": {  # 表示はEnglish、中身はUK
-        "voice": "en-GB-SoniaNeural", 
-        "prompt_target": "English (UK Style)", # スペル等をUK仕様に
+    "English": {  # 表示はEnglish、中身はUK仕様
+        "voice": "en-GB-SoniaNeural",  # イギリス英語音声
+        "prompt_target": "English (UK Spelling)", # AIへの指示
         "currency": "yen",
         "intro_template": "Hello, this is {store}. We would like to introduce our {title} menu.",
         "intro_index_msg": "This menu is divided into {count} categories. First, here is the index.",
         "intro_closing": "Please enjoy.",
         "intro_title": "Introduction & Index",
-        "ui": {"loading": "Loading...", "chapter": "Chapters", "speed": "Speed", "map": "Map", "play": "Play", "pause": "Pause", "prev": "Prev", "next": "Next", "slow": "Slow", "normal": "Normal", "fast": "Fast"}
+        "ui": {"loading": "Loading...", "chapter": "Chapters", "speed": "Speed", "map": "Map & Access (Google Map)", "play": "Play", "pause": "Pause", "prev": "Prev", "next": "Next", "slow": "Slow", "normal": "Normal", "fast": "Fast"}
     },
     "中文 (简体)": {
         "voice": "zh-CN-XiaoxiaoNeural",
@@ -76,7 +76,7 @@ LANG_CONFIG = {
         "intro_index_msg": "菜单共分为{count}个类别。首先是目录。",
         "intro_closing": "请慢慢听。",
         "intro_title": "简介与目录",
-        "ui": {"loading": "加载中...", "chapter": "章节列表", "speed": "语速", "map": "地图", "play": "播放", "pause": "暂停", "prev": "上一个", "next": "下一个", "slow": "慢速", "normal": "标准", "fast": "快速"}
+        "ui": {"loading": "加载中...", "chapter": "章节列表", "speed": "语速", "map": "地图 (Google Map)", "play": "播放", "pause": "暂停", "prev": "上一个", "next": "下一个", "slow": "慢速", "normal": "标准", "fast": "快速"}
     },
     "한국어": {
         "voice": "ko-KR-SunHiNeural",
@@ -86,7 +86,7 @@ LANG_CONFIG = {
         "intro_index_msg": "메뉴는 총 {count}개의 카테고리로 나누어져 있습니다. 먼저 목차입니다.",
         "intro_closing": "그럼 들어주세요.",
         "intro_title": "소개 및 목차",
-        "ui": {"loading": "로딩 중...", "chapter": "챕터 목록", "speed": "재생 속도", "map": "지도", "play": "재생", "pause": "일시 정지", "prev": "이전", "next": "다음", "slow": "느리게", "normal": "보통", "fast": "빠르게"}
+        "ui": {"loading": "로딩 중...", "chapter": "챕터 목록", "speed": "재생 속도", "map": "지도 (Google Map)", "play": "재생", "pause": "일시 정지", "prev": "이전", "next": "다음", "slow": "느리게", "normal": "보통", "fast": "빠르게"}
     }
 }
 
@@ -136,7 +136,7 @@ async def process_all_tracks_fast(menu_data, output_dir, voice_code, rate_value,
         save_path = os.path.join(output_dir, filename)
         speech_text = track['text']
         
-        # 番号付けロジック: i=0(Intro)は番号なし, i=1以降は "1. " から開始
+        # 番号付け: i=0(Intro)は番号なし, i=1以降は "1. " から開始
         if i > 0: 
              speech_text = f"{i}. {track['title']}.\n{track['text']}"
              
@@ -151,7 +151,7 @@ async def process_all_tracks_fast(menu_data, output_dir, voice_code, rate_value,
         progress_bar.progress(completed / total)
     return track_info_list
 
-# HTMLプレイヤー生成（多言語対応版）
+# HTMLプレイヤー生成（多言語対応版・replace方式）
 def create_standalone_html_player(store_name, menu_data, lang_settings, map_url=""):
     playlist_js = []
     for track in menu_data:
@@ -174,7 +174,6 @@ def create_standalone_html_player(store_name, menu_data, lang_settings, map_url=
         </div>
         """
 
-    # HTMLテンプレート（replace方式）
     html_template = """<!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>__STORE_NAME__</title>
 <style>
@@ -257,7 +256,6 @@ function ren(){
         m.setAttribute("role", "listitem");
         m.setAttribute("tabindex", "0");
         
-        // リスト番号付け: 0=Intro(なし), 1以降=1. 2.
         let label = t.title;
         if(i > 0){ label = i + ". " + t.title; }
         
@@ -342,13 +340,7 @@ def render_preview_player(tracks, lang_settings):
         d.innerText=l;
         d.setAttribute("role","listitem");d.setAttribute("tabindex","0");d.onclick=()=>{ld(i);au.play();pb.innerText="⏸";pb.setAttribute("aria-label","__UI_PAUSE__");};d.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();d.click();}};ls.appendChild(d);});}
     init();</script></body></html>"""
-    
-    html = html_template.replace("__PLAYLIST__", playlist_json)
-    html = html.replace("__UI_PREV__", ui['prev'])
-    html = html.replace("__UI_PLAY__", ui['play'])
-    html = html.replace("__UI_PAUSE__", ui['pause'])
-    html = html.replace("__UI_NEXT__", ui['next'])
-    html = html.replace("__UI_SPEED__", ui['speed'])
+    html = html_template.replace("__PLAYLIST__", playlist_json).replace("__UI_PREV__", ui['prev']).replace("__UI_PLAY__", ui['play']).replace("__UI_PAUSE__", ui['pause']).replace("__UI_NEXT__", ui['next']).replace("__UI_SPEED__", ui['speed'])
     components.html(html, height=450)
 
 # --- UI ---
@@ -360,15 +352,14 @@ with st.sidebar:
     else:
         api_key = st.text_input("Gemini APIキー", type="password")
     
-    # 言語選択
     st.subheader("🌐 言語選択 / Language")
     selected_lang = st.selectbox("ターゲット言語", list(LANG_CONFIG.keys()))
     lang_conf = LANG_CONFIG[selected_lang]
     st.info(f"出力言語: {lang_conf['prompt_target']}")
 
-    # 辞書機能
     st.divider()
     st.subheader("📖 辞書登録 (Learning)")
+    st.caption("よく間違える読み方を登録すると、AIが学習します。(例: 豚肉 -> ぶたにく)")
     user_dict = load_dictionary()
     
     with st.form("dict_form", clear_on_submit=True):
@@ -414,7 +405,6 @@ if 'captured_images' not in st.session_state: st.session_state.captured_images =
 if 'camera_key' not in st.session_state: st.session_state.camera_key = 0
 if 'generated_result' not in st.session_state: st.session_state.generated_result = None
 if 'show_camera' not in st.session_state: st.session_state.show_camera = False
-if 'menu_data_draft' not in st.session_state: st.session_state.menu_data_draft = None
 
 # Step 1 & 2
 st.markdown("### 1. お店情報の入力 / Store Info")
@@ -510,11 +500,15 @@ if final_image_list and st.session_state.retake_index is None:
 st.markdown("---")
 st.markdown("### 3. 音声メニューの作成 / Generate")
 
-if st.button("📝 原稿を作成 (Analysis)", type="primary", use_container_width=True, disabled=disable_create):
+if st.button("🎙️ 作成開始 (Generate Audio)", type="primary", use_container_width=True, disabled=disable_create):
     if not (api_key and target_model_name and store_name):
         st.error("設定や店舗名を確認してください / Check Settings"); st.stop()
     if not (final_image_list or target_url):
         st.warning("画像かURLを入力してください / Input Image or URL"); st.stop()
+
+    output_dir = os.path.abspath("menu_audio_album")
+    if os.path.exists(output_dir): shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
 
     with st.spinner(f'Analyzing & Translating to {selected_lang}...'):
         try:
@@ -583,46 +577,34 @@ if st.button("📝 原稿を作成 (Analysis)", type="primary", use_container_wi
 
             menu_data.insert(0, {"title": lang_conf['intro_title'], "text": intro_t})
             
-            st.session_state.menu_data_draft = menu_data
-            st.rerun()
+            progress_bar = st.progress(0)
+            st.info(f"Generating Audio in {selected_lang}...")
+            
+            generated_tracks = asyncio.run(process_all_tracks_fast(menu_data, output_dir, lang_conf["voice"], rate_value, progress_bar))
+            html_str = create_standalone_html_player(store_name, generated_tracks, lang_conf, map_url)
+            
+            d_str = datetime.now().strftime('%Y%m%d')
+            s_name = sanitize_filename(store_name)
+            zip_name = f"{s_name}_{sanitize_filename(selected_lang)}_{d_str}.zip"
+            zip_path = os.path.abspath(zip_name)
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
+                for root, dirs, files in os.walk(output_dir):
+                    for file in files: z.write(os.path.join(root, file), file)
+
+            with open(zip_path, "rb") as f:
+                zip_data = f.read()
+
+            st.session_state.generated_result = {
+                "zip_data": zip_data,
+                "zip_name": zip_name,
+                "html_content": html_str, 
+                "html_name": f"{s_name}_{sanitize_filename(selected_lang)}_player.html",
+                "tracks": generated_tracks,
+                "lang_conf": lang_conf
+            }
+            st.balloons()
 
         except Exception as e: st.error(f"Error: {e}")
-
-if st.session_state.menu_data_draft is not None:
-    st.info("👇 以下の原稿を確認・編集してください。")
-    edited_data = st.data_editor(st.session_state.menu_data_draft, num_rows="dynamic", use_container_width=True)
-    
-    if st.button("🎙️ 音声を生成 (Generate Audio)", type="primary", use_container_width=True):
-        output_dir = os.path.abspath("menu_audio_album")
-        if os.path.exists(output_dir): shutil.rmtree(output_dir)
-        os.makedirs(output_dir)
-        
-        progress_bar = st.progress(0)
-        st.info(f"Generating Audio in {selected_lang}...")
-        
-        generated_tracks = asyncio.run(process_all_tracks_fast(edited_data, output_dir, lang_conf["voice"], rate_value, progress_bar))
-        html_str = create_standalone_html_player(store_name, edited_data, lang_conf, map_url)
-        
-        d_str = datetime.now().strftime('%Y%m%d')
-        s_name = sanitize_filename(store_name)
-        zip_name = f"{s_name}_{sanitize_filename(selected_lang)}_{d_str}.zip"
-        zip_path = os.path.abspath(zip_name)
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for root, dirs, files in os.walk(output_dir):
-                for file in files: z.write(os.path.join(root, file), file)
-
-        with open(zip_path, "rb") as f:
-            zip_data = f.read()
-
-        st.session_state.generated_result = {
-            "zip_data": zip_data,
-            "zip_name": zip_name,
-            "html_content": html_str, 
-            "html_name": f"{s_name}_{sanitize_filename(selected_lang)}_player.html",
-            "tracks": generated_tracks,
-            "lang_conf": lang_conf
-        }
-        st.rerun()
 
 if st.session_state.generated_result:
     res = st.session_state.generated_result

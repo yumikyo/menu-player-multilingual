@@ -33,7 +33,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 辞書ファイルの管理機能を追加 ---
+# --- 辞書ファイルの管理 ---
 DICT_FILE = "my_dictionary.json"
 
 def load_dictionary():

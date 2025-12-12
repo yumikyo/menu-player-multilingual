@@ -1,1 +1,8 @@
-
+streamlit
+google-generativeai
+edge-tts
+beautifulsoup4
+gTTS
+nest_asyncio
+Pillow
+requests
